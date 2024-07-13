@@ -1,0 +1,203 @@
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+name: argoapp-log-service
+namespace: bhla-qa
+replicaCount: 1
+
+image:
+  repository: 033634448415.dkr.ecr.us-west-2.amazonaws.com/ecr-bhla-dev-usw2-log-service
+  # pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: "267b352"
+
+
+configmap:
+  name: argoapp-log-service
+  data:
+    profile: 'qa'
+    jackson.serialization.INDENT_OUTPUT: 'true'
+    resources.static-locations.classpath: '/META-INF/resources/,classpath:/resources/,classpath:/static/,classpath:/public/,classpath:/swagger/'
+    classpath: '/META-INF/resources/,classpath:/resources/,classpath:/static/,classpath:/public/,classpath:/swagger/'
+    opensearch.uris: 'https://vpc-amo-bhla-qa-usw2-edge-logs-rhil2iy5byi34nnjv6qmc2lb2a.us-west-2.es.amazonaws.com:443'
+    mvc.pathmatch.matching-strategy: 'ANT_PATH_MATCHER'
+    OpenSearch-Index: 'bhla_edge'
+    swagger-url: 'https://apps.qa.bhla.belden.io'
+    job.enabled: 'false'
+    cron.expression: '0 */5 * * * *'
+    configFilePath: 'src/main/resources/logs/log_config.json'
+    deviceListPath: 'src/main/resources/logs/devices.json'
+    simulator.index: 'log_message'
+    autoIntervalTargetBucketCount: '48'
+    springdoc.swagger-ui.path: '/logservice/swagger-ui.html'
+    springdoc.api-docs.path: '/logservice/v3/api-docs'
+
+env:
+  - name: SPRING_PROFILES_ACTIVE
+    valueFrom:
+      configMapKeyRef:
+        name: argoapp-log-service
+        key: profile
+  - name: opensearch.username
+    valueFrom:
+      secretKeyRef:
+        name: argoapp-log-service
+        key: opensearch_username
+  - name: opensearch.password
+    valueFrom:
+      secretKeyRef:
+        name: argoapp-log-service
+        key: opensearch_password
+
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceaccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  # eks.amazonaws.com/role-arn: arn:aws:iam::033634448415:role/eks-secret-manager-role
+  annotations: {
+    eks.amazonaws.com/role-arn: arn:aws:iam::033634448415:role/role-bh-app-common-eks-secret-manager
+  }
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: "argoapp-log-service"
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  name: argoapp-log-service
+  type: ClusterIP
+  port: 80
+  targetport: 8080
+  secureport: 443
+
+container:
+  name: log-service
+  port: 8080
+  protocol: TCP
+
+secretproviderclass:
+  name: argoapp-log-service
+  # region: us-west-2
+  provider: aws
+  secretObjects:
+  - secretName: "argoapp-log-service"
+    type: Opaque
+    data:
+    - objectName: opensearchuser
+      key: opensearch_username
+    - objectName: opensearchpass
+      key: opensearch_password
+  parameters:
+    objects: |
+      - objectName: sm-bh-app-qa-usw2-k8s-logservice-secrets
+        objectType: secretsmanager
+        jmesPath:
+          - path: opensearchusername
+            objectAlias: opensearchuser
+          - path: opensearchpassword
+            objectAlias: opensearchpass
+            
+ingress:
+  name: argoapp-log-service-test
+  enabled: true
+  className: "alb"
+  annotations: {
+    alb.ingress.kubernetes.io/scheme: internet-facing,
+    alb.ingress.kubernetes.io/target-type: ip,
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}]',
+    alb.ingress.kubernetes.io/ip-address-type: ipv4,
+    alb.ingress.kubernetes.io/load-balancer-name: log-service-bhla-qa,
+    alb.ingress.kubernetes.io/backend-protocol: "HTTP",
+    alb.ingress.kubernetes.io/healthcheck-port: '8080',
+    alb.ingress.kubernetes.io/healthcheck-path: /api/health,
+    alb.ingress.kubernetes.io/ssl-redirect: '443',
+    external-dns.alpha.kubernetes.io/hostname: logservice.qa.bhla.belden.io,
+    cert-manager.io/cluster-issuer: letsencrypt,
+    # alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-west-2:033634448415:certificate/6e10ab4a-56c5-4eab-8238-6fb03c5b4779,
+    # not needed
+    alb.ingress.kubernetes.io/load-balancer-attributes: 'access_logs.s3.enabled=true,access_logs.s3.bucket=s3-bhla-qa-usw2-elb-access-logs,access_logs.s3.prefix=alb'
+  }
+
+  tls: 
+   - secretName: letsencrypt-tls-logservice
+     hosts:
+       - logservice.qa.bhla.belden.io
+
+  rules:
+      host: "logservice.qa.bhla.belden.io"
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: argoapp-log-service
+              port:
+                number: 80
+
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+# Additional volumes on the output Deployment definition.
+volumes:
+  name: argoapp-log-service
+  secretProviderClass: argoapp-log-service
+
+# Additional volumeMounts on the output Deployment definition.
+# kubectl get all -n secret-store-csi-driver "daemonset.apps/argoapp-secret-store-csi-driver-aws-secrets-store-csi-driver-pr"
+# common for all
+volumeMounts:
+  name: argoapp-log-service
+  mountPath: "/mnt/secrets-store"                                       
+
+nodeSelector: {}
+
+tolerations:
+  value: "bhla-qa"
+
+affinity: {}

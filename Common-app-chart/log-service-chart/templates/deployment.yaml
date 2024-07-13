@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: {{ .Values.name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.name }}
+    spec:
+      serviceAccountName: {{ .Values.serviceaccount.name }}
+      imagePullSecrets:
+      {{- if .Values.imagePullSecrets }}
+        {{- range .Values.imagePullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+      volumes:
+      - name: {{ .Values.volumes.name }}
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: {{ .Values.secretproviderclass.name }}
+      containers:
+        - name: {{ .Values.container.name }}
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          # pullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+          - name: http
+            containerPort: {{ .Values.container.port }}
+            protocol: {{ .Values.container.protocol }}
+          env:
+          {{- range .Values.env }}
+            - name: {{ .name }}
+              valueFrom: {{- toYaml .valueFrom | nindent 18 }}
+          {{- end }}
+          volumeMounts:
+          - name: {{ .Values.volumeMounts.name }}
+            mountPath: "/mnt/secrets-store"
+            readOnly: true
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.configmap.name }}
+      tolerations:
+      - key: "nodepool"
+        operator: "Equal"
+        value: {{ .Values.tolerations.value }}
+        effect: "NoSchedule"
