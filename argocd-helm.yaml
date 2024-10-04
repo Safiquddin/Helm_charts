@@ -9,7 +9,17 @@ metadata:
 spec:
   destination:
     namespace: bhla-dev
-…    automated:
+    server: https://kubernetes.default.svc
+  project: prj-bhla-apps-dev
+  source:
+    path: charts/config-service-chart
+    repoURL: https://bitbucket.org/belden/bhla-config-service.git
+    targetRevision: dev
+    helm:
+       valueFiles:
+         - values-dev.yaml
+  syncPolicy:
+    automated:
       prune: true
       selfHeal: true
     syncOptions:
