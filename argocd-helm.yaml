@@ -1,0 +1,16 @@
+# Example of Argocd helm deployment
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argoapp-bhla-config-service-charts-dev
+  namespace: argocd
+  finalizers:
+  - resources-finalizer.argocd.argoproj.io
+spec:
+  destination:
+    namespace: bhla-dev
+…    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
